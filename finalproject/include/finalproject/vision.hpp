@@ -20,6 +20,7 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr original_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr yellow_mask_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr white_mask_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr line_pub_;
 };
 
 #endif // FINALPROJECT_VISION_HPP

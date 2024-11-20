@@ -11,6 +11,7 @@ Vision::Vision(const std::string &node_name)
     original_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/original", 10);
     yellow_mask_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/yellow_mask", 10);
     white_mask_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/white_mask", 10);
+    line_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/line_detection", 10);
 }
 
 void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
@@ -152,7 +153,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
 
-                 // 긴 축을 찾기 위한 최소 영역 사각형
+                // 긴 축을 찾기 위한 최소 영역 사각형
                 cv::RotatedRect rot_rect = cv::minAreaRect(contour);
                 cv::Point2f vertices[4];
                 rot_rect.points(vertices);
@@ -187,10 +188,13 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             cv_bridge::CvImage(msg->header, "mono8", yellow_mask).toImageMsg();
         sensor_msgs::msg::Image::SharedPtr white_mask_msg =
             cv_bridge::CvImage(msg->header, "mono8", white_mask_combined).toImageMsg();
+        sensor_msgs::msg::Image::SharedPtr line_msg =
+            cv_bridge::CvImage(msg->header, "bgr8", line_display).toImageMsg();
 
         original_pub_->publish(*original_msg);
         yellow_mask_pub_->publish(*yellow_mask_msg);
         white_mask_pub_->publish(*white_mask_msg);
+        line_pub_->publish(*line_msg);
 
         cv::imshow("Original Image", resized_frame);
         cv::imshow("Preprocessed", preprocessed);
