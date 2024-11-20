@@ -151,7 +151,9 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             {
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
-ect = cv::minAreaRect(contour);
+
+                 // 긴 축을 찾기 위한 최소 영역 사각형
+                cv::RotatedRect rot_rect = cv::minAreaRect(contour);
                 cv::Point2f vertices[4];
                 rot_rect.points(vertices);
 
@@ -196,7 +198,6 @@ ect = cv::minAreaRect(contour);
         cv::imshow("White Mask", white_mask_combined);
         cv::imshow("Detected Lines", line_display);
         cv::waitKey(1);
-
     }
     catch (const cv_bridge::Exception &e)
     {
