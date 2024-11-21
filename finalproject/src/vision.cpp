@@ -54,7 +54,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         std::vector<cv::Mat> lab_channels;
         cv::split(lab, lab_channels);
 
-        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
         clahe->apply(lab_channels[0], lab_channels[0]);
 
         cv::merge(lab_channels, lab);
@@ -74,15 +74,15 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 
         // 1. HSV 기반 흰색 검출
         cv::Mat white_mask_hsv;
-        cv::Scalar lower_white_hsv(0, 25, 220);
-        cv::Scalar upper_white_hsv(180, 30, 255);
+        cv::Scalar lower_white_hsv(0, 20, 220);
+        cv::Scalar upper_white_hsv(180, 25, 255);
         cv::inRange(hsv, lower_white_hsv, upper_white_hsv, white_mask_hsv);
 
         // 2. Lab 기반 흰색 검출
         cv::Mat white_mask_lab;
         std::vector<cv::Mat> lab_channels_white;
         cv::split(lab, lab_channels_white);
-        cv::threshold(lab_channels_white[0], white_mask_lab, 240, 255, cv::THRESH_BINARY);
+        cv::threshold(lab_channels_white[0], white_mask_lab, 210, 255, cv::THRESH_BINARY);
 
         // 3. RGB 기반 흰색 검출
         cv::Mat white_mask_rgb;
