@@ -2,7 +2,14 @@
 #include "finalproject/vision.hpp"
 
 Vision::Vision(const std::string &node_name)
-    : Node(node_name)
+    : Node(node_name),
+      yellow_line_detected(false),
+      white_line_detected(false),
+      yellow_line_count(0),
+      white_line_count(0),
+      array_index(0),
+      yellow_line_valid(false),
+      white_line_valid(false)
 {
     image_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
         "/camera1/image_raw", 10,
@@ -12,8 +19,32 @@ Vision::Vision(const std::string &node_name)
     yellow_mask_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/yellow_mask", 10);
     white_mask_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/white_mask", 10);
     line_pub_ = this->create_publisher<sensor_msgs::msg::Image>("/vision/line_detection", 10);
+
+    yellow_detected_pub_ = this->create_publisher<std_msgs::msg::Bool>("/vision/yellow_line_detected", 10);
+    white_detected_pub_ = this->create_publisher<std_msgs::msg::Bool>("/vision/white_line_detected", 10);
+
+    yellow_detection_array.fill(false);
+    white_detection_array.fill(false);
 }
 
+bool Vision::isLineValid(std::array<bool, 10> &detection_array, bool current_detection)
+{
+    // 현재 감지 결과를 배열에 저장
+    detection_array[array_index] = current_detection;
+
+    // true의 개수 계산
+    int detection_count = 0;
+    for (bool detection : detection_array)
+    {
+        if (detection)
+        {
+            detection_count++;
+        }
+    }
+
+    // 임계값 이상이면 유효한 선으로 판단
+    return detection_count >= DETECTION_THRESHOLD;
+}
 void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 {
     try
@@ -60,14 +91,31 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::merge(lab_channels, lab);
         cv::cvtColor(lab, preprocessed, cv::COLOR_Lab2BGR);
 
-        // 노란색 검출 (HSV)
         cv::Mat hsv;
         cv::cvtColor(preprocessed, hsv, cv::COLOR_BGR2HSV);
 
-        cv::Mat yellow_mask;
-        cv::Scalar lower_yellow(20, 50, 100);
-        cv::Scalar upper_yellow(35, 255, 255);
-        cv::inRange(hsv, lower_yellow, upper_yellow, yellow_mask);
+        cv::Mat yellow_mask_combined;
+
+        cv::Mat yellow_mask_hsv;
+        cv::Scalar lower_yellow_hsv(20, 50, 100);
+        cv::Scalar upper_yellow_hsv(35, 255, 255);
+        cv::inRange(hsv, lower_yellow_hsv, upper_yellow_hsv, yellow_mask_hsv);
+
+        cv::Mat yellow_mask_lab;
+        cv::inRange(lab, cv::Scalar(150, 120, 140), cv::Scalar(250, 135, 190), yellow_mask_lab);
+
+        cv::Mat yellow_mask_rgb;
+        cv::inRange(preprocessed, cv::Scalar(150, 150, 0), cv::Scalar(255, 255, 130), yellow_mask_rgb);
+
+        cv::bitwise_or(yellow_mask_hsv, yellow_mask_lab, yellow_mask_combined);
+        cv::bitwise_or(yellow_mask_combined, yellow_mask_rgb, yellow_mask_combined);
+
+        // 모폴로지 연산
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+        cv::Mat kernel_large = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+
+        cv::morphologyEx(yellow_mask_combined, yellow_mask_combined, cv::MORPH_OPEN, kernel);
+        cv::morphologyEx(yellow_mask_combined, yellow_mask_combined, cv::MORPH_CLOSE, kernel_large);
 
         // 개선된 흰색 검출
         cv::Mat white_mask_combined;
@@ -82,26 +130,19 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Mat white_mask_lab;
         std::vector<cv::Mat> lab_channels_white;
         cv::split(lab, lab_channels_white);
-        cv::threshold(lab_channels_white[0], white_mask_lab, 210, 255, cv::THRESH_BINARY);
+        cv::threshold(lab_channels_white[0], white_mask_lab, 200, 255, cv::THRESH_BINARY);
 
         // 3. RGB 기반 흰색 검출
         cv::Mat white_mask_rgb;
-        cv::inRange(preprocessed, cv::Scalar(245, 245, 245), cv::Scalar(255, 255, 255), white_mask_rgb);
+        cv::inRange(preprocessed, cv::Scalar(240, 240, 240), cv::Scalar(255, 255, 255), white_mask_rgb);
 
         // 노란색 마스크 제외
         cv::Mat yellow_mask_dilated;
-        cv::dilate(yellow_mask, yellow_mask_dilated, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
+        cv::dilate(yellow_mask_combined, yellow_mask_dilated, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
 
         cv::bitwise_or(white_mask_hsv, white_mask_lab, white_mask_combined);
         cv::bitwise_or(white_mask_combined, white_mask_rgb, white_mask_combined);
         cv::bitwise_and(white_mask_combined, ~yellow_mask_dilated, white_mask_combined);
-
-        // 모폴로지 연산
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-        cv::Mat kernel_large = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
-
-        cv::morphologyEx(yellow_mask, yellow_mask, cv::MORPH_OPEN, kernel);
-        cv::morphologyEx(yellow_mask, yellow_mask, cv::MORPH_CLOSE, kernel_large);
 
         cv::morphologyEx(white_mask_combined, white_mask_combined, cv::MORPH_OPEN, kernel);
         cv::morphologyEx(white_mask_combined, white_mask_combined, cv::MORPH_CLOSE, kernel_large);
@@ -109,11 +150,16 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 
         // 선 검출 (컨투어 기반)
         std::vector<std::vector<cv::Point>> yellow_contours, white_contours;
-        cv::findContours(yellow_mask, yellow_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        cv::findContours(yellow_mask_combined, yellow_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
         cv::findContours(white_mask_combined, white_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
         // 컨투어 필터링 및 선 그리기
         cv::Mat line_display = preprocessed.clone();
+
+        yellow_line_detected = false;
+        white_line_detected = false;
+        yellow_line_count = 0;
+        white_line_count = 0;
 
         // 노란색 선 그리기
         for (const auto &contour : yellow_contours)
@@ -121,6 +167,8 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             double area = cv::contourArea(contour);
             if (area > 150.0)
             {
+                yellow_line_detected = true;
+                yellow_line_count++;
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
 
@@ -148,8 +196,11 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         for (const auto &contour : white_contours)
         {
             double area = cv::contourArea(contour);
-            if (area > 100.0)
+            if (area > 150.0)
             {
+                white_line_detected = true;
+                white_line_count++;
+
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
 
@@ -174,6 +225,14 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             }
         }
 
+        if (yellow_line_detected || white_line_detected)
+        {
+            RCLCPP_INFO(this->get_logger(),
+                        "Lines detected - Yellow: %d (count: %d), White: %d (count: %d)",
+                        yellow_line_detected, yellow_line_count,
+                        white_line_detected, white_line_count);
+        }
+
         // ROI 영역 표시
         for (int i = 0; i < 4; i++)
         {
@@ -181,11 +240,25 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
                      cv::Scalar(0, 255, 0), 2);
         }
 
+        yellow_line_valid = isLineValid(yellow_detection_array, yellow_line_detected);
+        white_line_valid = isLineValid(white_detection_array, white_line_detected);
+
+        array_index = (array_index + 1) & ARRAY_SIZE;
+
+        auto yellow_detected_msg = std_msgs::msg::Bool();
+        auto white_detected_msg = std_msgs::msg::Bool();
+
+        yellow_detected_msg.data = yellow_line_valid;
+        white_detected_msg.data = white_line_valid;
+
+        yellow_detected_pub_->publish(yellow_detected_msg);
+        white_detected_pub_->publish(white_detected_msg);
+
         // Publish images
         sensor_msgs::msg::Image::SharedPtr original_msg =
             cv_bridge::CvImage(msg->header, "bgr8", resized_frame).toImageMsg();
         sensor_msgs::msg::Image::SharedPtr yellow_mask_msg =
-            cv_bridge::CvImage(msg->header, "mono8", yellow_mask).toImageMsg();
+            cv_bridge::CvImage(msg->header, "mono8", yellow_mask_combined).toImageMsg();
         sensor_msgs::msg::Image::SharedPtr white_mask_msg =
             cv_bridge::CvImage(msg->header, "mono8", white_mask_combined).toImageMsg();
         sensor_msgs::msg::Image::SharedPtr line_msg =
@@ -198,7 +271,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 
         cv::imshow("Original Image", resized_frame);
         cv::imshow("Preprocessed", preprocessed);
-        cv::imshow("Yellow Mask", yellow_mask);
+        cv::imshow("Yellow Mask", yellow_mask_combined);
         cv::imshow("White Mask", white_mask_combined);
         cv::imshow("Detected Lines", line_display);
         cv::waitKey(1);
