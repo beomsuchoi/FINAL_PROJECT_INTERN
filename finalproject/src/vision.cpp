@@ -243,7 +243,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         yellow_line_valid = isLineValid(yellow_detection_array, yellow_line_detected);
         white_line_valid = isLineValid(white_detection_array, white_line_detected);
 
-        array_index = (array_index + 1) & ARRAY_SIZE;
+        array_index = (array_index + 1) % ARRAY_SIZE;
 
         auto yellow_detected_msg = std_msgs::msg::Bool();
         auto white_detected_msg = std_msgs::msg::Bool();
