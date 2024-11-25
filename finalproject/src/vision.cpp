@@ -60,10 +60,10 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Point2f src_vertices[4];
         cv::Point2f dst_vertices[4];
 
-        src_vertices[0] = cv::Point2f(width * 0.15f, height * 0.85f);
-        src_vertices[1] = cv::Point2f(width * 0.85f, height * 0.85f);
-        src_vertices[2] = cv::Point2f(width * 0.9f, height * 1.0f);
-        src_vertices[3] = cv::Point2f(width * 0.1f, height * 1.0f);
+        src_vertices[0] = cv::Point2f(width * 0.25f, height * 0.9f);
+        src_vertices[1] = cv::Point2f(width * 0.75f, height * 0.9f);
+        src_vertices[2] = cv::Point2f(width * 0.8f, height * 1.0f);
+        src_vertices[3] = cv::Point2f(width * 0.2f, height * 1.0f);
 
         dst_vertices[0] = cv::Point2f(0, 0);
         dst_vertices[1] = cv::Point2f(width, 0);
@@ -85,7 +85,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         std::vector<cv::Mat> lab_channels;
         cv::split(lab, lab_channels);
 
-        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(1.5, cv::Size(8, 8));
         clahe->apply(lab_channels[0], lab_channels[0]);
 
         cv::merge(lab_channels, lab);
@@ -97,15 +97,15 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Mat yellow_mask_combined;
 
         cv::Mat yellow_mask_hsv;
-        cv::Scalar lower_yellow_hsv(20, 50, 100);
+        cv::Scalar lower_yellow_hsv(25, 100, 100);
         cv::Scalar upper_yellow_hsv(35, 255, 255);
         cv::inRange(hsv, lower_yellow_hsv, upper_yellow_hsv, yellow_mask_hsv);
 
         cv::Mat yellow_mask_lab;
-        cv::inRange(lab, cv::Scalar(150, 120, 140), cv::Scalar(250, 135, 190), yellow_mask_lab);
+        cv::inRange(lab, cv::Scalar(150, 120, 130), cv::Scalar(250, 140, 200), yellow_mask_lab);
 
         cv::Mat yellow_mask_rgb;
-        cv::inRange(preprocessed, cv::Scalar(150, 150, 0), cv::Scalar(255, 255, 130), yellow_mask_rgb);
+        cv::inRange(preprocessed, cv::Scalar(180, 180, 0), cv::Scalar(255, 255, 150), yellow_mask_rgb);
 
         cv::bitwise_or(yellow_mask_hsv, yellow_mask_lab, yellow_mask_combined);
         cv::bitwise_or(yellow_mask_combined, yellow_mask_rgb, yellow_mask_combined);
@@ -122,15 +122,15 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 
         // 1. HSV 기반 흰색 검출
         cv::Mat white_mask_hsv;
-        cv::Scalar lower_white_hsv(0, 20, 220);
-        cv::Scalar upper_white_hsv(180, 25, 255);
+        cv::Scalar lower_white_hsv(0, 0, 200);
+        cv::Scalar upper_white_hsv(180, 30, 255);
         cv::inRange(hsv, lower_white_hsv, upper_white_hsv, white_mask_hsv);
 
         // 2. Lab 기반 흰색 검출
         cv::Mat white_mask_lab;
         std::vector<cv::Mat> lab_channels_white;
         cv::split(lab, lab_channels_white);
-        cv::threshold(lab_channels_white[0], white_mask_lab, 200, 255, cv::THRESH_BINARY);
+        cv::threshold(lab_channels_white[0], white_mask_lab, 230, 255, cv::THRESH_BINARY);
 
         // 3. RGB 기반 흰색 검출
         cv::Mat white_mask_rgb;
