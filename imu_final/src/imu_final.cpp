@@ -16,27 +16,26 @@ void ImuFinal::quaternionToEuler(const double q0, const double q1,
                                 const double q2, const double q3,
                                 double& roll, double& pitch, double& yaw)
 {
-    double sinr_cosp = 2 * (q0 * q1 + q2 * q3);
-    double cosr_cosp = 1 - 2 * (q1 * q1 + q2 * q2);
+    // w = q3, x = q2, y = q1, z = q0 순서로 변경
+    double sinr_cosp = 2 * (q3 * q2 + q1 * q0);
+    double cosr_cosp = 1 - 2 * (q2 * q2 + q1 * q1);
     roll = std::atan2(sinr_cosp, cosr_cosp);
 
-    // Pitch (y-axis rotation)
-    double sinp = 2 * (q0 * q2 - q3 * q1);
+    double sinp = 2 * (q3 * q1 - q0 * q2);
     if (std::abs(sinp) >= 1)
-        pitch = std::copysign(M_PI / 2, sinp); // use 90 degrees if out of range
+        pitch = std::copysign(M_PI / 2, sinp);
     else
         pitch = std::asin(sinp);
 
-    // Yaw (z-axis rotation)
-    double siny_cosp = 2 * (q0 * q3 + q1 * q2);
-    double cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3);
+    double siny_cosp = 2 * (q3 * q0 + q2 * q1);
+    double cosy_cosp = 1 - 2 * (q1 * q1 + q0 * q0);
     yaw = std::atan2(siny_cosp, cosy_cosp);
 
-    // Convert to degrees if needed
     roll = roll * 180.0 / M_PI;
     pitch = pitch * 180.0 / M_PI;
     yaw = yaw * 180.0 / M_PI;
 }
+
 
 void ImuFinal::imuCallback(const std_msgs::msg::String::SharedPtr msg)
 {
