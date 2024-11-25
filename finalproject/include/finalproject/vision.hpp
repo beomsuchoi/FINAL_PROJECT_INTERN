@@ -4,11 +4,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
-#include <std_msgs/msg/bool.hpp> 
+#include <std_msgs/msg/bool.hpp>
 #include "cv_bridge/cv_bridge.h"
 #include <opencv2/opencv.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <vector>
-#include <array>  // std::array를 위해 추가
+#include <array> // std::array를 위해 추가
 
 class Vision : public rclcpp::Node
 {
@@ -17,7 +18,7 @@ public:
 
 private:
     void imageCallback(const sensor_msgs::msg::Image::SharedPtr msg);
-    bool isLineValid(std::array<bool, 10>& detection_array, bool current_detection);
+    bool isLineValid(std::array<bool, 10> &detection_array, bool current_detection);
 
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_subscription_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr original_pub_;
@@ -40,6 +41,11 @@ private:
     int array_index;
     bool yellow_line_valid;
     bool white_line_valid;
+
+    float yellow_line_x;
+    float white_line_x;
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr yellow_pos_pub_;
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr white_pos_pub_;
 };
 
 #endif // FINALPROJECT_VISION_HPP

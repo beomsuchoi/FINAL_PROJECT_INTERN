@@ -9,7 +9,9 @@ Vision::Vision(const std::string &node_name)
       white_line_count(0),
       array_index(0),
       yellow_line_valid(false),
-      white_line_valid(false)
+      white_line_valid(false),
+      yellow_line_x(0.0f),
+      white_line_x(0.0f)
 {
     image_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
         "/camera1/image_raw", 10,
@@ -22,6 +24,9 @@ Vision::Vision(const std::string &node_name)
 
     yellow_detected_pub_ = this->create_publisher<std_msgs::msg::Bool>("/vision/yellow_line_detected", 10);
     white_detected_pub_ = this->create_publisher<std_msgs::msg::Bool>("/vision/white_line_detected", 10);
+
+    yellow_pos_pub_ = this->create_publisher<std_msgs::msg::Float32>("/vision/yellow_line_x", 10);
+    white_pos_pub_ = this->create_publisher<std_msgs::msg::Float32>("/vision/white_line_x", 10);
 
     yellow_detection_array.fill(false);
     white_detection_array.fill(false);
@@ -60,10 +65,10 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Point2f src_vertices[4];
         cv::Point2f dst_vertices[4];
 
-        src_vertices[0] = cv::Point2f(width * 0.25f, height * 0.9f);
-        src_vertices[1] = cv::Point2f(width * 0.75f, height * 0.9f);
-        src_vertices[2] = cv::Point2f(width * 0.8f, height * 1.0f);
-        src_vertices[3] = cv::Point2f(width * 0.2f, height * 1.0f);
+        src_vertices[0] = cv::Point2f(width * 0.2f, height * 0.9f);
+        src_vertices[1] = cv::Point2f(width * 0.8f, height * 0.9f);
+        src_vertices[2] = cv::Point2f(width * 0.85f, height * 1.0f);
+        src_vertices[3] = cv::Point2f(width * 0.15f, height * 1.0f);
 
         dst_vertices[0] = cv::Point2f(0, 0);
         dst_vertices[1] = cv::Point2f(width, 0);
@@ -97,7 +102,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Mat yellow_mask_combined;
 
         cv::Mat yellow_mask_hsv;
-        cv::Scalar lower_yellow_hsv(25, 100, 100);
+        cv::Scalar lower_yellow_hsv(25, 140, 140);
         cv::Scalar upper_yellow_hsv(35, 255, 255);
         cv::inRange(hsv, lower_yellow_hsv, upper_yellow_hsv, yellow_mask_hsv);
 
@@ -130,7 +135,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Mat white_mask_lab;
         std::vector<cv::Mat> lab_channels_white;
         cv::split(lab, lab_channels_white);
-        cv::threshold(lab_channels_white[0], white_mask_lab, 230, 255, cv::THRESH_BINARY);
+        cv::threshold(lab_channels_white[0], white_mask_lab, 235, 255, cv::THRESH_BINARY);
 
         // 3. RGB 기반 흰색 검출
         cv::Mat white_mask_rgb;
@@ -169,6 +174,20 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             {
                 yellow_line_detected = true;
                 yellow_line_count++;
+
+                cv::Moments moments = cv::moments(contour);
+                if (moments.m00 != 0)
+                {
+                    yellow_line_x = moments.m10 / moments.m00;
+
+                    // Normalize to -1 to 1 range where 0 is center
+                    yellow_line_x = (yellow_line_x / width) * 2 - 1;
+
+                    auto yellow_pos_msg = std_msgs::msg::Float32();
+                    yellow_pos_msg.data = yellow_line_x;
+                    yellow_pos_pub_->publish(yellow_pos_msg);
+                }
+
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
 
@@ -200,6 +219,19 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
             {
                 white_line_detected = true;
                 white_line_count++;
+
+                cv::Moments moments = cv::moments(contour);
+                if (moments.m00 != 0)
+                {
+                    white_line_x = moments.m10 / moments.m00;
+
+                    // Normalize to -1 to 1 range where 0 is center
+                    white_line_x = (white_line_x / width) * 2 - 1;
+
+                    auto white_pos_msg = std_msgs::msg::Float32();
+                    white_pos_msg.data = white_line_x;
+                    white_pos_pub_->publish(white_pos_msg);
+                }
 
                 std::vector<cv::Point> approx;
                 cv::approxPolyDP(contour, approx, 10, true);
