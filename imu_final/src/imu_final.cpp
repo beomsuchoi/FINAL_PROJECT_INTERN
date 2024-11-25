@@ -12,15 +12,39 @@ ImuFinal::ImuFinal(const std::string &node_name) : Node(node_name)
     yaw_pub_ = this->create_publisher<std_msgs::msg::Float32>("/yaw", 10);
 }
 
+void ImuFinal::quaternionToEuler(const double q0, const double q1, 
+                                const double q2, const double q3,
+                                double& roll, double& pitch, double& yaw)
+{
+    double sinr_cosp = 2 * (q0 * q1 + q2 * q3);
+    double cosr_cosp = 1 - 2 * (q1 * q1 + q2 * q2);
+    roll = std::atan2(sinr_cosp, cosr_cosp);
+
+    // Pitch (y-axis rotation)
+    double sinp = 2 * (q0 * q2 - q3 * q1);
+    if (std::abs(sinp) >= 1)
+        pitch = std::copysign(M_PI / 2, sinp); // use 90 degrees if out of range
+    else
+        pitch = std::asin(sinp);
+
+    // Yaw (z-axis rotation)
+    double siny_cosp = 2 * (q0 * q3 + q1 * q2);
+    double cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3);
+    yaw = std::atan2(siny_cosp, cosy_cosp);
+
+    // Convert to degrees if needed
+    roll = roll * 180.0 / M_PI;
+    pitch = pitch * 180.0 / M_PI;
+    yaw = yaw * 180.0 / M_PI;
+}
+
 void ImuFinal::imuCallback(const std_msgs::msg::String::SharedPtr msg)
 {
     std::vector<double> values;
-    std::stringstream ss(msg->data);
-    std::string token;
-    
-    // Remove brackets
+    // 대괄호 제거용
     std::string data = msg->data.substr(1, msg->data.length() - 2);
     std::stringstream ss2(data);
+    std::string token;
     
     while (std::getline(ss2, token, ',')) {
         values.push_back(std::stod(token));
@@ -33,19 +57,18 @@ void ImuFinal::imuCallback(const std_msgs::msg::String::SharedPtr msg)
 
 void ImuFinal::processImuData(const std::vector<double>& data)
 {
+    double roll, pitch, yaw;
+    quaternionToEuler(data[0], data[1], data[2], data[3], roll, pitch, yaw);
+    
     auto roll_msg = std_msgs::msg::Float32();
     auto pitch_msg = std_msgs::msg::Float32();
     auto yaw_msg = std_msgs::msg::Float32();
     
-    // Assuming the first three values are roll, pitch, yaw
-    roll_msg.data = static_cast<float>(data[0]);
-    pitch_msg.data = static_cast<float>(data[1]);
-    yaw_msg.data = static_cast<float>(data[2]);
+    roll_msg.data = static_cast<float>(static_cast<int>(roll));    // 소수점 제거
+    pitch_msg.data = static_cast<float>(static_cast<int>(pitch));  // 소수점 제거
+    yaw_msg.data = static_cast<float>(static_cast<int>(yaw));      // 소수점 제거
     
     roll_pub_->publish(roll_msg);
     pitch_pub_->publish(pitch_msg);
     yaw_pub_->publish(yaw_msg);
-    
-    RCLCPP_INFO(this->get_logger(), "Angles - Roll: %.2f, Pitch: %.2f, Yaw: %.2f",
-        data[0], data[1], data[2]);
 }

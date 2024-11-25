@@ -20,6 +20,9 @@ private:
 
     void imuCallback(const std_msgs::msg::String::SharedPtr msg);
     void processImuData(const std::vector<double>& data);
+    void quaternionToEuler(const double q0, const double q1, 
+                          const double q2, const double q3,
+                          double& roll, double& pitch, double& yaw);
 };
 
 #endif

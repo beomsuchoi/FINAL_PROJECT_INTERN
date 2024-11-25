@@ -65,10 +65,10 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Point2f src_vertices[4];
         cv::Point2f dst_vertices[4];
 
-        src_vertices[0] = cv::Point2f(width * 0.2f, height * 0.9f);
-        src_vertices[1] = cv::Point2f(width * 0.8f, height * 0.9f);
-        src_vertices[2] = cv::Point2f(width * 0.85f, height * 1.0f);
-        src_vertices[3] = cv::Point2f(width * 0.15f, height * 1.0f);
+        src_vertices[0] = cv::Point2f(width * 0.15f, height * 0.9f);
+        src_vertices[1] = cv::Point2f(width * 0.85f, height * 0.9f);
+        src_vertices[2] = cv::Point2f(width * 0.9f, height * 1.0f);
+        src_vertices[3] = cv::Point2f(width * 0.1f, height * 1.0f);
 
         dst_vertices[0] = cv::Point2f(0, 0);
         dst_vertices[1] = cv::Point2f(width, 0);
