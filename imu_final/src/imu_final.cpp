@@ -1,6 +1,29 @@
 #include "imu_final/imu_final.hpp"
 #include <cmath>
 
+float LowPassFilter::update(float input) {
+    if (first_run) {
+        filtered_value = input;
+        first_run = false;
+        return filtered_value;
+    }
+    filtered_value = alpha * input + (1 - alpha) * filtered_value;
+    return filtered_value;
+}
+
+float KalmanFilter::update(float measurement) {
+    if (first_run) {
+        X = measurement;
+        first_run = false;
+        return X;
+    }
+    P = P + Q;
+    K = P / (P + R);
+    X = X + K * (measurement - X);
+    P = (1 - K) * P;
+    return X;
+}
+
 ImuFinal::ImuFinal(const std::string &node_name) : Node(node_name)
 {
     imu_sub_ = this->create_subscription<std_msgs::msg::String>(
@@ -16,7 +39,6 @@ void ImuFinal::quaternionToEuler(const double q0, const double q1,
                                 const double q2, const double q3,
                                 double& roll, double& pitch, double& yaw)
 {
-    // w = q3, x = q2, y = q1, z = q0 순서로 변경
     double sinr_cosp = 2 * (q3 * q2 + q1 * q0);
     double cosr_cosp = 1 - 2 * (q2 * q2 + q1 * q1);
     roll = std::atan2(sinr_cosp, cosr_cosp);
@@ -36,11 +58,9 @@ void ImuFinal::quaternionToEuler(const double q0, const double q1,
     yaw = yaw * 180.0 / M_PI;
 }
 
-
 void ImuFinal::imuCallback(const std_msgs::msg::String::SharedPtr msg)
 {
     std::vector<double> values;
-    // 대괄호 제거용
     std::string data = msg->data.substr(1, msg->data.length() - 2);
     std::stringstream ss2(data);
     std::string token;
@@ -59,13 +79,21 @@ void ImuFinal::processImuData(const std::vector<double>& data)
     double roll, pitch, yaw;
     quaternionToEuler(data[0], data[1], data[2], data[3], roll, pitch, yaw);
     
+    float filtered_roll = roll_lpf.update(roll);
+    float filtered_pitch = pitch_lpf.update(pitch);
+    float filtered_yaw = yaw_lpf.update(yaw);
+    
+    float final_roll = roll_kf.update(filtered_roll);
+    float final_pitch = pitch_kf.update(filtered_pitch);
+    float final_yaw = yaw_kf.update(filtered_yaw);
+    
     auto roll_msg = std_msgs::msg::Float32();
     auto pitch_msg = std_msgs::msg::Float32();
     auto yaw_msg = std_msgs::msg::Float32();
     
-    roll_msg.data = static_cast<float>(static_cast<int>(roll));    // 소수점 제거
-    pitch_msg.data = static_cast<float>(static_cast<int>(pitch));  // 소수점 제거
-    yaw_msg.data = static_cast<float>(static_cast<int>(yaw));      // 소수점 제거
+    roll_msg.data = static_cast<float>(static_cast<int>(final_roll));
+    pitch_msg.data = static_cast<float>(static_cast<int>(final_pitch));
+    yaw_msg.data = static_cast<float>(static_cast<int>(final_yaw));
     
     roll_pub_->publish(roll_msg);
     pitch_pub_->publish(pitch_msg);
