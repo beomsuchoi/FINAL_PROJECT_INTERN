@@ -28,7 +28,9 @@ private:
 
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr yellow_detected_pub_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr white_detected_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr blue_sign_detected_pub_;
 
+    bool blue_sign_detected;
     bool yellow_line_detected;
     bool white_line_detected;
     int yellow_line_count;

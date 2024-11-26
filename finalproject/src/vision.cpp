@@ -28,6 +28,8 @@ Vision::Vision(const std::string &node_name)
     yellow_pos_pub_ = this->create_publisher<std_msgs::msg::Float32>("/vision/yellow_line_x", 10);
     white_pos_pub_ = this->create_publisher<std_msgs::msg::Float32>("/vision/white_line_x", 10);
 
+    blue_sign_detected_pub_ = this->create_publisher<std_msgs::msg::Bool>("/vision/blue_sign_detected", 10);
+
     yellow_detection_array.fill(false);
     white_detection_array.fill(false);
 }
@@ -64,9 +66,15 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         // ROI 설정
         cv::Point2f src_vertices[4];
         cv::Point2f dst_vertices[4];
+        cv::Point2f signs_vertices[4];
 
-        src_vertices[0] = cv::Point2f(width * 0.15f, height * 0.9f);
-        src_vertices[1] = cv::Point2f(width * 0.85f, height * 0.9f);
+        signs_vertices[0] = cv::Point2f(width * 0.95f, height * 0.3f);
+        signs_vertices[1] = cv::Point2f(width * 1.0f, height * 0.3f);
+        signs_vertices[2] = cv::Point2f(width * 1.0f, height * 0.55f);
+        signs_vertices[3] = cv::Point2f(width * 0.95f, height * 0.55f);
+
+        src_vertices[0] = cv::Point2f(width * 0.15f, height * 0.87f);
+        src_vertices[1] = cv::Point2f(width * 0.85f, height * 0.87f);
         src_vertices[2] = cv::Point2f(width * 0.9f, height * 1.0f);
         src_vertices[3] = cv::Point2f(width * 0.1f, height * 1.0f);
 
@@ -266,11 +274,77 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
                         white_line_detected, white_line_count);
         }
 
-        // ROI 영역 표시
+        // 표지판 검출 부분
+        cv::Mat sign_roi_mask = cv::Mat::zeros(resized_frame.size(), CV_8UC1);
+        std::vector<cv::Point> roi_points;
+        for (int i = 0; i < 4; i++)
+        {
+            roi_points.push_back(cv::Point(signs_vertices[i].x, signs_vertices[i].y));
+        }
+        cv::fillConvexPoly(sign_roi_mask, roi_points, cv::Scalar(255));
+
+        // HSV 색공간에서 파란색 검출
+        cv::Mat sign_hsv;
+        cv::cvtColor(resized_frame, sign_hsv, cv::COLOR_BGR2HSV);
+
+        // 파란색 마스크 생성 - HSV 값 조정
+        cv::Mat blue_mask;
+        cv::Scalar lower_blue_hsv(100, 50, 50); // 더 어두운 파란색도 검출하도록 수정
+        cv::Scalar upper_blue_hsv(130, 255, 255);
+        cv::inRange(sign_hsv, lower_blue_hsv, upper_blue_hsv, blue_mask);
+
+        // ROI 영역 내의 파란색만 검출
+        cv::Mat blue_roi;
+        cv::bitwise_and(blue_mask, sign_roi_mask, blue_roi);
+
+        // 노이즈 제거
+        cv::morphologyEx(blue_roi, blue_roi, cv::MORPH_OPEN, kernel);
+        cv::morphologyEx(blue_roi, blue_roi, cv::MORPH_CLOSE, kernel_large);
+
+        // 파란색 영역 검출
+        std::vector<std::vector<cv::Point>> blue_contours;
+        cv::findContours(blue_roi, blue_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        // 파란색 표지판 검출 여부
+        bool blue_sign_detected = false;
+
+        // 일정 크기 이상의 파란색 영역이 있는지 확인
+        for (const auto &contour : blue_contours)
+        {
+            double area = cv::contourArea(contour);
+            if (area > 50.0)
+            { // 면적 임계값 낮춤
+                blue_sign_detected = true;
+                break;
+            }
+        }
+
+        // 파란색 표지판 검출 결과 발행
+        auto blue_sign_msg = std_msgs::msg::Bool();
+        blue_sign_msg.data = blue_sign_detected;
+        blue_sign_detected_pub_->publish(blue_sign_msg);
+
+        // 디버깅을 위해 blue_roi 표시 (선택사항)
+        cv::imshow("Blue Sign ROI", blue_roi);
+
+        // ROI 영역 표시 (빨간색)
+        for (int i = 0; i < 4; i++)
+        {
+            cv::line(resized_frame, signs_vertices[i], signs_vertices[(i + 1) % 4],
+                     cv::Scalar(0, 0, 255), 2);
+        }
+
         for (int i = 0; i < 4; i++)
         {
             cv::line(resized_frame, src_vertices[i], src_vertices[(i + 1) % 4],
                      cv::Scalar(0, 255, 0), 2);
+        }
+
+        // 표지판 ROI 영역 표시 (빨간색으로 표시)
+        for (int i = 0; i < 4; i++)
+        {
+            cv::line(resized_frame, signs_vertices[i], signs_vertices[(i + 1) % 4],
+                     cv::Scalar(0, 0, 255), 2);
         }
 
         yellow_line_valid = isLineValid(yellow_detection_array, yellow_line_detected);
