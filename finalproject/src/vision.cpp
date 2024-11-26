@@ -83,6 +83,7 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         // 전처리 과정
         cv::Mat preprocessed;
         cv::GaussianBlur(birds_eye_view, preprocessed, cv::Size(5, 5), 0);
+        cv::GaussianBlur(birds_eye_view, preprocessed, cv::Size(5, 5), 0);
 
         // CLAHE 적용 (L*a*b* 색공간)
         cv::Mat lab;
@@ -102,8 +103,8 @@ void Vision::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
         cv::Mat yellow_mask_combined;
 
         cv::Mat yellow_mask_hsv;
-        cv::Scalar lower_yellow_hsv(25, 140, 140);
-        cv::Scalar upper_yellow_hsv(35, 255, 255);
+        cv::Scalar lower_yellow_hsv(15, 130, 130);
+        cv::Scalar upper_yellow_hsv(25, 255, 255);
         cv::inRange(hsv, lower_yellow_hsv, upper_yellow_hsv, yellow_mask_hsv);
 
         cv::Mat yellow_mask_lab;
